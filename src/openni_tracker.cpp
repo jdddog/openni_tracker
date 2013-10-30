@@ -8,6 +8,10 @@
 #include <XnOpenNI.h>
 #include <XnCodecIDs.h>
 #include <XnCppWrapper.h>
+#include <vector>
+#include <string>
+#include <std_msgs/UInt8MultiArray.h>
+#include <stdint.h>
 
 using std::string;
 
@@ -17,6 +21,12 @@ xn::UserGenerator  g_UserGenerator;
 
 XnBool g_bNeedPose   = FALSE;
 XnChar g_strPose[20] = "";
+double smoothing;
+int num_users;
+
+ros::Publisher users_pub;
+std::vector<uint8_t> user_ids;
+std_msgs::UInt8MultiArray msg;
 
 void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
 	ROS_INFO("New User %d", nId);
@@ -29,6 +39,18 @@ void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, v
 
 void XN_CALLBACK_TYPE User_LostUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
 	ROS_INFO("Lost user %d", nId);
+	//Remove user from list and publish
+	int old_size = user_ids.size();
+	user_ids.erase(std::remove(user_ids.begin(), user_ids.end(), nId), user_ids.end());	
+	
+	//if user did get removed, then publish
+	if((old_size - user_ids.size()) == 1)
+	{
+		msg.data = user_ids;
+		users_pub.publish(msg);
+	}
+	
+	
 }
 
 void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& capability, XnUserID nId, void* pCookie) {
@@ -38,7 +60,13 @@ void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& c
 void XN_CALLBACK_TYPE UserCalibration_CalibrationEnd(xn::SkeletonCapability& capability, XnUserID nId, XnBool bSuccess, void* pCookie) {
 	if (bSuccess) {
 		ROS_INFO("Calibration complete, start tracking user %d", nId);
+		g_UserGenerator.GetSkeletonCap().SetSmoothing(smoothing);
 		g_UserGenerator.GetSkeletonCap().StartTracking(nId);
+		
+		//Add user to list and publish
+		user_ids.push_back(nId);
+		msg.data = user_ids;
+		users_pub.publish(msg);
 	}
 	else {
 		ROS_INFO("Calibration failed for user %d", nId);
@@ -94,8 +122,8 @@ void publishTransform(XnUserID const& user, XnSkeletonJoint const& joint, string
 }
 
 void publishTransforms(const std::string& frame_id) {
-    XnUserID users[15];
-    XnUInt16 users_count = 15;
+    XnUserID users[num_users];
+    XnUInt16 users_count = num_users;
     g_UserGenerator.GetUsers(users, users_count);
 
     for (int i = 0; i < users_count; ++i) {
@@ -136,6 +164,16 @@ void publishTransforms(const std::string& frame_id) {
 int main(int argc, char **argv) {
     ros::init(argc, argv, "openni_tracker");
     ros::NodeHandle nh;
+    ros::NodeHandle pnh("~"); //Relative node handle
+
+    //Get parameters
+    string frame_id("openni_depth_frame");
+    pnh.getParam("camera_frame_id", frame_id); 
+    pnh.param("num_users", num_users, 2);
+    pnh.param("smoothing", smoothing, 0.7); // changes the smoothing value applied to skeletons
+    
+    //Init active users array and publisher
+    users_pub = pnh.advertise<std_msgs::UInt8MultiArray>("users", num_users, true);
 
     string configFilename = ros::package::getPath("openni_tracker") + "/openni_tracker.xml";
     XnStatus nRetVal = g_Context.InitFromXmlFile(configFilename.c_str());
@@ -180,11 +218,6 @@ int main(int argc, char **argv) {
 	CHECK_RC(nRetVal, "StartGenerating");
 
 	ros::Rate r(30);
-
-        
-        ros::NodeHandle pnh("~");
-        string frame_id("openni_depth_frame");
-        pnh.getParam("camera_frame_id", frame_id);
                 
 	while (ros::ok()) {
 		g_Context.WaitAndUpdateAll();
