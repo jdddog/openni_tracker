@@ -10,7 +10,7 @@
 #include <XnCppWrapper.h>
 #include <vector>
 #include <string>
-#include <std_msgs/UInt8MultiArray.h>
+#include <std_msgs/UInt16MultiArray.h>
 #include <stdint.h>
 
 using std::string;
@@ -25,8 +25,8 @@ double smoothing;
 int num_users;
 
 ros::Publisher users_pub;
-std::vector<uint8_t> user_ids;
-std_msgs::UInt8MultiArray msg;
+std::vector<uint16_t> user_ids;
+std_msgs::UInt16MultiArray msg;
 
 void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
 	ROS_INFO("New User %d", nId);
@@ -169,11 +169,11 @@ int main(int argc, char **argv) {
     //Get parameters
     string frame_id("openni_depth_frame");
     pnh.getParam("camera_frame_id", frame_id); 
-    pnh.param("num_users", num_users, 2);
+    pnh.param("num_users", num_users, 15);
     pnh.param("smoothing", smoothing, 0.7); // changes the smoothing value applied to skeletons
     
     //Init active users array and publisher
-    users_pub = pnh.advertise<std_msgs::UInt8MultiArray>("users", num_users, true);
+    users_pub = pnh.advertise<std_msgs::UInt16MultiArray>("users", num_users, true);
 
     string configFilename = ros::package::getPath("openni_tracker") + "/openni_tracker.xml";
     XnStatus nRetVal = g_Context.InitFromXmlFile(configFilename.c_str());
