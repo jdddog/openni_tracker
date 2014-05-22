@@ -1,0 +1,7 @@
+<launch>
+	<node pkg="openni_tracker" type="openni_tracker" name="openni_tracker" >
+		<param name="camera_frame_id" value="camera_depth_frame"/>
+		<param name="smoothing" value="0.7"/>
+		<param name="num_users" value="2"/>
+	</node>
+</launch>
