@@ -23,6 +23,7 @@ XnBool g_bNeedPose   = FALSE;
 XnChar g_strPose[20] = "";
 double smoothing;
 int num_users;
+XnSkeletonProfile skeleton_profile;
 
 ros::Publisher users_pub;
 std::vector<uint16_t> user_ids;
@@ -135,23 +136,54 @@ void publishTransforms(const std::string& frame_id) {
         publishTransform(user, XN_SKEL_HEAD,           frame_id, "head");
         publishTransform(user, XN_SKEL_NECK,           frame_id, "neck");
         publishTransform(user, XN_SKEL_TORSO,          frame_id, "torso");
+        
+        if(skeleton_profile == XN_SKEL_PROFILE_ALL || skeleton_profile == XN_SKEL_PROFILE_UPPER || skeleton_profile == XN_SKEL_PROFILE_HEAD_HANDS)
+        {
+			publishTransform(user, XN_SKEL_LEFT_SHOULDER,  frame_id, "left_shoulder");
+			publishTransform(user, XN_SKEL_LEFT_ELBOW,     frame_id, "left_elbow");
+			publishTransform(user, XN_SKEL_LEFT_HAND,      frame_id, "left_hand");
 
-        publishTransform(user, XN_SKEL_LEFT_SHOULDER,  frame_id, "left_shoulder");
-        publishTransform(user, XN_SKEL_LEFT_ELBOW,     frame_id, "left_elbow");
-        publishTransform(user, XN_SKEL_LEFT_HAND,      frame_id, "left_hand");
+			publishTransform(user, XN_SKEL_RIGHT_SHOULDER, frame_id, "right_shoulder");
+			publishTransform(user, XN_SKEL_RIGHT_ELBOW,    frame_id, "right_elbow");
+			publishTransform(user, XN_SKEL_RIGHT_HAND,     frame_id, "right_hand");
+		}
+		
+        if(skeleton_profile == XN_SKEL_PROFILE_LOWER || skeleton_profile == XN_SKEL_PROFILE_ALL)
+        {
+			publishTransform(user, XN_SKEL_LEFT_HIP,       frame_id, "left_hip");
+			publishTransform(user, XN_SKEL_LEFT_KNEE,      frame_id, "left_knee");
+			publishTransform(user, XN_SKEL_LEFT_FOOT,      frame_id, "left_foot");
 
-        publishTransform(user, XN_SKEL_RIGHT_SHOULDER, frame_id, "right_shoulder");
-        publishTransform(user, XN_SKEL_RIGHT_ELBOW,    frame_id, "right_elbow");
-        publishTransform(user, XN_SKEL_RIGHT_HAND,     frame_id, "right_hand");
-
-        publishTransform(user, XN_SKEL_LEFT_HIP,       frame_id, "left_hip");
-        publishTransform(user, XN_SKEL_LEFT_KNEE,      frame_id, "left_knee");
-        publishTransform(user, XN_SKEL_LEFT_FOOT,      frame_id, "left_foot");
-
-        publishTransform(user, XN_SKEL_RIGHT_HIP,      frame_id, "right_hip");
-        publishTransform(user, XN_SKEL_RIGHT_KNEE,     frame_id, "right_knee");
-        publishTransform(user, XN_SKEL_RIGHT_FOOT,     frame_id, "right_foot");
+			publishTransform(user, XN_SKEL_RIGHT_HIP,      frame_id, "right_hip");
+			publishTransform(user, XN_SKEL_RIGHT_KNEE,     frame_id, "right_knee");
+			publishTransform(user, XN_SKEL_RIGHT_FOOT,     frame_id, "right_foot");
+		}
     }
+}
+
+XnSkeletonProfile skeleton_profile_from_string(string skeleton_profile_str)
+{
+	if(skeleton_profile_str == "XN_SKEL_PROFILE_ALL")
+	{
+		return XN_SKEL_PROFILE_ALL;
+	}
+	else if(skeleton_profile_str == "XN_SKEL_PROFILE_UPPER")
+	{
+		return XN_SKEL_PROFILE_UPPER;
+	}
+	else if(skeleton_profile_str == "XN_SKEL_PROFILE_LOWER")
+	{
+		return XN_SKEL_PROFILE_LOWER;
+	}
+	else if(skeleton_profile_str == "XN_SKEL_PROFILE_HEAD_HANDS")
+	{
+		return XN_SKEL_PROFILE_HEAD_HANDS;
+	}
+	else
+	{
+		ROS_ERROR("%s isn't a valid skeleton profile. Setting to default (XN_SKEL_PROFILE_ALL) instead.", skeleton_profile_str.c_str());
+		return XN_SKEL_PROFILE_ALL;
+	}
 }
 
 #define CHECK_RC(nRetVal, what)										\
@@ -171,6 +203,11 @@ int main(int argc, char **argv) {
     pnh.getParam("camera_frame_id", frame_id); 
     pnh.param("num_users", num_users, 15);
     pnh.param("smoothing", smoothing, 0.7); // changes the smoothing value applied to skeletons
+    
+    string skeleton_profile_str = "";
+    string skeleton_profile_default = "XN_SKEL_PROFILE_ALL";
+    pnh.param("skeleton_profile", skeleton_profile_str, skeleton_profile_default); // set what body region to track
+    skeleton_profile = skeleton_profile_from_string(skeleton_profile_str);
     
     //Init active users array and publisher
     users_pub = pnh.advertise<std_msgs::UInt16MultiArray>("users", num_users, true);
@@ -212,8 +249,8 @@ int main(int argc, char **argv) {
 		g_UserGenerator.GetSkeletonCap().GetCalibrationPose(g_strPose);
 	}
 
-	g_UserGenerator.GetSkeletonCap().SetSkeletonProfile(XN_SKEL_PROFILE_ALL);
-
+	g_UserGenerator.GetSkeletonCap().SetSkeletonProfile(skeleton_profile);
+	
 	nRetVal = g_Context.StartGeneratingAll();
 	CHECK_RC(nRetVal, "StartGenerating");
 
