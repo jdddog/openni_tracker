@@ -1,0 +1,18 @@
+int32 user_id
+geometry_msgs/PoseStamped head
+geometry_msgs/PoseStamped neck
+geometry_msgs/PoseStamped torso
+geometry_msgs/PoseStamped left_shoulder
+geometry_msgs/PoseStamped left_elbow
+geometry_msgs/PoseStamped left_hand
+geometry_msgs/PoseStamped right_shoulder
+geometry_msgs/PoseStamped right_elbow
+geometry_msgs/PoseStamped right_hand
+geometry_msgs/PoseStamped left_hip
+geometry_msgs/PoseStamped left_knee
+geometry_msgs/PoseStamped left_foot
+geometry_msgs/PoseStamped right_hip
+geometry_msgs/PoseStamped right_knee
+geometry_msgs/PoseStamped right_foot
+
+

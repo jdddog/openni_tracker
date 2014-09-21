@@ -3,6 +3,10 @@
 #include <ros/ros.h>
 #include <ros/package.h>
 #include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <openni_tracker/User.h>
+#include <openni_tracker/UserList.h>
 #include <kdl/frames.hpp>
 
 #include <XnOpenNI.h>
@@ -14,6 +18,7 @@
 #include <stdint.h>
 
 using std::string;
+using namespace openni_tracker;
 
 xn::Context        g_Context;
 xn::DepthGenerator g_DepthGenerator;
@@ -26,8 +31,8 @@ int num_users;
 XnSkeletonProfile skeleton_profile;
 
 ros::Publisher users_pub;
-std::vector<uint16_t> user_ids;
-std_msgs::UInt16MultiArray msg;
+UserList user_list;
+
 
 void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
 	ROS_INFO("New User %d", nId);
@@ -40,18 +45,6 @@ void XN_CALLBACK_TYPE User_NewUser(xn::UserGenerator& generator, XnUserID nId, v
 
 void XN_CALLBACK_TYPE User_LostUser(xn::UserGenerator& generator, XnUserID nId, void* pCookie) {
 	ROS_INFO("Lost user %d", nId);
-	//Remove user from list and publish
-	int old_size = user_ids.size();
-	user_ids.erase(std::remove(user_ids.begin(), user_ids.end(), nId), user_ids.end());	
-	
-	//if user did get removed, then publish
-	if((old_size - user_ids.size()) == 1)
-	{
-		msg.data = user_ids;
-		users_pub.publish(msg);
-	}
-	
-	
 }
 
 void XN_CALLBACK_TYPE UserCalibration_CalibrationStart(xn::SkeletonCapability& capability, XnUserID nId, void* pCookie) {
@@ -63,11 +56,7 @@ void XN_CALLBACK_TYPE UserCalibration_CalibrationEnd(xn::SkeletonCapability& cap
 		ROS_INFO("Calibration complete, start tracking user %d", nId);
 		g_UserGenerator.GetSkeletonCap().SetSmoothing(smoothing);
 		g_UserGenerator.GetSkeletonCap().StartTracking(nId);
-		
-		//Add user to list and publish
-		user_ids.push_back(nId);
-		msg.data = user_ids;
-		users_pub.publish(msg);
+
 	}
 	else {
 		ROS_INFO("Calibration failed for user %d", nId);
@@ -84,8 +73,7 @@ void XN_CALLBACK_TYPE UserPose_PoseDetected(xn::PoseDetectionCapability& capabil
     g_UserGenerator.GetSkeletonCap().RequestCalibration(nId, TRUE);
 }
 
-void publishTransform(XnUserID const& user, XnSkeletonJoint const& joint, string const& frame_id, string const& child_frame_id) {
-    static tf::TransformBroadcaster br;
+geometry_msgs::PoseStamped get_joint_pose(XnUserID const& user, XnSkeletonJoint const& joint, string const& frame_id) {
 
     XnSkeletonJointPosition joint_position;
     g_UserGenerator.GetSkeletonCap().GetSkeletonJointPosition(user, joint, joint_position);
@@ -104,7 +92,7 @@ void publishTransform(XnUserID const& user, XnSkeletonJoint const& joint, string
     rotation.GetQuaternion(qx, qy, qz, qw);
 
     char child_frame_no[128];
-    snprintf(child_frame_no, sizeof(child_frame_no), "%s_%d", child_frame_id.c_str(), user);
+//    snprintf(child_frame_no, sizeof(child_frame_no), "%s_%d", child_frame_id.c_str(), user);
 
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x, y, z));
@@ -119,46 +107,59 @@ void publishTransform(XnUserID const& user, XnSkeletonJoint const& joint, string
 
     transform = change_frame * transform;
 
-    br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), frame_id, child_frame_no));
+    //Convert to pose stamped msg
+    tf::Stamped<tf::Pose> tf_stamped(transform, ros::Time::now(), frame_id);
+    geometry_msgs::PoseStamped msg;
+    tf::poseStampedTFToMsg(tf_stamped, msg);
+
+    return msg;
 }
 
-void publishTransforms(const std::string& frame_id) {
+void publish_user_data(const std::string& frame_id) {
     XnUserID users[num_users];
     XnUInt16 users_count = num_users;
     g_UserGenerator.GetUsers(users, users_count);
+
+    user_list.users.clear();
 
     for (int i = 0; i < users_count; ++i) {
         XnUserID user = users[i];
         if (!g_UserGenerator.GetSkeletonCap().IsTracking(user))
             continue;
 
+        User msg;
+        msg.user_id = user;
+        msg.head = get_joint_pose(user, XN_SKEL_HEAD, frame_id);
+        msg.neck = get_joint_pose(user, XN_SKEL_NECK, frame_id);
+        msg.torso = get_joint_pose(user, XN_SKEL_TORSO, frame_id);
 
-        publishTransform(user, XN_SKEL_HEAD,           frame_id, "head");
-        publishTransform(user, XN_SKEL_NECK,           frame_id, "neck");
-        publishTransform(user, XN_SKEL_TORSO,          frame_id, "torso");
-        
         if(skeleton_profile == XN_SKEL_PROFILE_ALL || skeleton_profile == XN_SKEL_PROFILE_UPPER || skeleton_profile == XN_SKEL_PROFILE_HEAD_HANDS)
         {
-			publishTransform(user, XN_SKEL_LEFT_SHOULDER,  frame_id, "left_shoulder");
-			publishTransform(user, XN_SKEL_LEFT_ELBOW,     frame_id, "left_elbow");
-			publishTransform(user, XN_SKEL_LEFT_HAND,      frame_id, "left_hand");
+            msg.left_shoulder = get_joint_pose(user, XN_SKEL_LEFT_SHOULDER, frame_id);
+            msg.left_elbow = get_joint_pose(user, XN_SKEL_LEFT_ELBOW, frame_id);
+            msg.left_hand = get_joint_pose(user, XN_SKEL_LEFT_HAND, frame_id);
 
-			publishTransform(user, XN_SKEL_RIGHT_SHOULDER, frame_id, "right_shoulder");
-			publishTransform(user, XN_SKEL_RIGHT_ELBOW,    frame_id, "right_elbow");
-			publishTransform(user, XN_SKEL_RIGHT_HAND,     frame_id, "right_hand");
+            msg.right_shoulder = get_joint_pose(user, XN_SKEL_RIGHT_SHOULDER, frame_id);
+            msg.right_elbow = get_joint_pose(user, XN_SKEL_RIGHT_ELBOW, frame_id);
+            msg.right_hand = get_joint_pose(user, XN_SKEL_RIGHT_HAND, frame_id);
 		}
-		
+		else
+
         if(skeleton_profile == XN_SKEL_PROFILE_LOWER || skeleton_profile == XN_SKEL_PROFILE_ALL)
         {
-			publishTransform(user, XN_SKEL_LEFT_HIP,       frame_id, "left_hip");
-			publishTransform(user, XN_SKEL_LEFT_KNEE,      frame_id, "left_knee");
-			publishTransform(user, XN_SKEL_LEFT_FOOT,      frame_id, "left_foot");
+            msg.left_hip = get_joint_pose(user, XN_SKEL_LEFT_HIP, frame_id);
+            msg.left_knee = get_joint_pose(user, XN_SKEL_LEFT_KNEE, frame_id);
+            msg.left_foot = get_joint_pose(user, XN_SKEL_LEFT_FOOT, frame_id);
 
-			publishTransform(user, XN_SKEL_RIGHT_HIP,      frame_id, "right_hip");
-			publishTransform(user, XN_SKEL_RIGHT_KNEE,     frame_id, "right_knee");
-			publishTransform(user, XN_SKEL_RIGHT_FOOT,     frame_id, "right_foot");
+            msg.right_hip = get_joint_pose(user, XN_SKEL_RIGHT_HIP, frame_id);
+            msg.right_knee = get_joint_pose(user, XN_SKEL_RIGHT_KNEE, frame_id);
+            msg.right_foot = get_joint_pose(user, XN_SKEL_RIGHT_FOOT, frame_id);
 		}
+
+		user_list.users.push_back(msg);
     }
+
+    users_pub.publish(user_list);
 }
 
 XnSkeletonProfile skeleton_profile_from_string(string skeleton_profile_str)
@@ -210,7 +211,7 @@ int main(int argc, char **argv) {
     skeleton_profile = skeleton_profile_from_string(skeleton_profile_str);
     
     //Init active users array and publisher
-    users_pub = pnh.advertise<std_msgs::UInt16MultiArray>("users", num_users, true);
+    users_pub = pnh.advertise<UserList>("user_list", 10);
 
     string configFilename = ros::package::getPath("openni_tracker") + "/openni_tracker.xml";
     XnStatus nRetVal = g_Context.InitFromXmlFile(configFilename.c_str());
@@ -258,7 +259,7 @@ int main(int argc, char **argv) {
                 
 	while (ros::ok()) {
 		g_Context.WaitAndUpdateAll();
-		publishTransforms(frame_id);
+		publish_user_data(frame_id);
 		r.sleep();
 	}
 
