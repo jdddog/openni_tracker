@@ -104,7 +104,7 @@ void publishTransform(XnUserID const& user, XnSkeletonJoint const& joint, string
     rotation.GetQuaternion(qx, qy, qz, qw);
 
     char child_frame_no[128];
-    snprintf(child_frame_no, sizeof(child_frame_no), "%s_%d", child_frame_id.c_str(), user);
+    snprintf(child_frame_no, sizeof(child_frame_no), "person%d_%s", user, child_frame_id.c_str());
 
     tf::Transform transform;
     transform.setOrigin(tf::Vector3(x, y, z));
@@ -132,31 +132,30 @@ void publishTransforms(const std::string& frame_id) {
         if (!g_UserGenerator.GetSkeletonCap().IsTracking(user))
             continue;
 
-
         publishTransform(user, XN_SKEL_HEAD,           frame_id, "head");
         publishTransform(user, XN_SKEL_NECK,           frame_id, "neck");
         publishTransform(user, XN_SKEL_TORSO,          frame_id, "torso");
         
         if(skeleton_profile == XN_SKEL_PROFILE_ALL || skeleton_profile == XN_SKEL_PROFILE_UPPER || skeleton_profile == XN_SKEL_PROFILE_HEAD_HANDS)
         {
-			publishTransform(user, XN_SKEL_LEFT_SHOULDER,  frame_id, "left_shoulder");
-			publishTransform(user, XN_SKEL_LEFT_ELBOW,     frame_id, "left_elbow");
-			publishTransform(user, XN_SKEL_LEFT_HAND,      frame_id, "left_hand");
+			publishTransform(user, XN_SKEL_LEFT_SHOULDER,  frame_id, "right_shoulder");
+			publishTransform(user, XN_SKEL_LEFT_ELBOW,     frame_id, "right_elbow");
+			publishTransform(user, XN_SKEL_LEFT_HAND,      frame_id, "right_hand");
 
-			publishTransform(user, XN_SKEL_RIGHT_SHOULDER, frame_id, "right_shoulder");
-			publishTransform(user, XN_SKEL_RIGHT_ELBOW,    frame_id, "right_elbow");
-			publishTransform(user, XN_SKEL_RIGHT_HAND,     frame_id, "right_hand");
+			publishTransform(user, XN_SKEL_RIGHT_SHOULDER, frame_id, "left_shoulder");
+			publishTransform(user, XN_SKEL_RIGHT_ELBOW,    frame_id, "left_elbow");
+			publishTransform(user, XN_SKEL_RIGHT_HAND,     frame_id, "left_hand");
 		}
 		
         if(skeleton_profile == XN_SKEL_PROFILE_LOWER || skeleton_profile == XN_SKEL_PROFILE_ALL)
         {
-			publishTransform(user, XN_SKEL_LEFT_HIP,       frame_id, "left_hip");
-			publishTransform(user, XN_SKEL_LEFT_KNEE,      frame_id, "left_knee");
-			publishTransform(user, XN_SKEL_LEFT_FOOT,      frame_id, "left_foot");
+			publishTransform(user, XN_SKEL_LEFT_HIP,       frame_id, "right_hip");
+			publishTransform(user, XN_SKEL_LEFT_KNEE,      frame_id, "right_knee");
+			publishTransform(user, XN_SKEL_LEFT_FOOT,      frame_id, "right_foot");
 
-			publishTransform(user, XN_SKEL_RIGHT_HIP,      frame_id, "right_hip");
-			publishTransform(user, XN_SKEL_RIGHT_KNEE,     frame_id, "right_knee");
-			publishTransform(user, XN_SKEL_RIGHT_FOOT,     frame_id, "right_foot");
+			publishTransform(user, XN_SKEL_RIGHT_HIP,      frame_id, "left_hip");
+			publishTransform(user, XN_SKEL_RIGHT_KNEE,     frame_id, "left_knee");
+			publishTransform(user, XN_SKEL_RIGHT_FOOT,     frame_id, "left_foot");
 		}
     }
 }
